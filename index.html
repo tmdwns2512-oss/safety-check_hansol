@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>화물 차량 안전점검 체크리스트</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" rel="stylesheet" />
+</head>
+<body>
+    <div id="app">
+        <header class="app-header">
+            <h1>화물차량 안전점검 체크리스트</h1>
+            <div class="center-badge" style="text-align:center; font-weight:bold; color:#0056b3; margin-bottom: 10px;">[천안센터]</div>
+            <div id="step-indicator">Step 1 / 5</div>
+        </header>
+
+        <!-- STEP 1: 차량 정보 입력 -->
+        <section id="step1" class="step active">
+            <h2>차량 정보 입력</h2>
+            <div class="form-group">
+                <label for="vehicleNo">차량번호 <span class="required">*</span></label>
+                <input type="text" id="vehicleNo" placeholder="예: 123가4567" autocomplete="off" inputmode="text">
+            </div>
+            <div class="form-group">
+                <label for="carrierName">운송사명 <span class="optional">(선택)</span></label>
+                <input type="text" id="carrierName" placeholder="소속 운송사를 입력하세요" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label for="driverName">기사명 <span class="optional">(선택)</span></label>
+                <input type="text" id="driverName" placeholder="성함을 입력하세요" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label>차량 유형 <span class="required">*</span></label>
+                <div class="radio-card-group">
+                    <label class="radio-card">
+                        <input type="radio" name="vehicleType" value="WING">
+                        <span class="card-content">윙바디 (WING)</span>
+                    </label>
+                    <label class="radio-card">
+                        <input type="radio" name="vehicleType" value="CARGO">
+                        <span class="card-content">카고 (CARGO)</span>
+                    </label>
+                    <label class="radio-card">
+                        <input type="radio" name="vehicleType" value="CONTAINER">
+                        <span class="card-content">컨테이너 (CONTAINER)</span>
+                    </label>
+                </div>
+            </div>
+            <div class="bottom-actions">
+                <button class="btn primary" onclick="nextStep(2)">다음</button>
+            </div>
+        </section>
+
+        <!-- STEP 2: 차량 검사 기록 -->
+        <section id="step2" class="step">
+            <h2>차량 검사 기록 必</h2>
+            
+            <div class="form-group check-item" style="margin-top:20px;">
+                <label>① 종합 검사 성능결과 <span class="required">*</span></label>
+                <div class="radio-card-group horizontal">
+                    <label class="radio-card"><input type="radio" name="insp_comprehensive" value="양호"><span class="card-content">양호</span></label>
+                    <label class="radio-card warning"><input type="radio" name="insp_comprehensive" value="불량"><span class="card-content">불량</span></label>
+                </div>
+            </div>
+
+            <div class="form-group check-item">
+                <label>② 정기검사 성능결과 <span class="required">*</span></label>
+                <div class="radio-card-group horizontal">
+                    <label class="radio-card"><input type="radio" name="insp_regular" value="양호"><span class="card-content">양호</span></label>
+                    <label class="radio-card warning"><input type="radio" name="insp_regular" value="불량"><span class="card-content">불량</span></label>
+                </div>
+            </div>
+
+            <div class="bottom-actions flex">
+                <button class="btn secondary" onclick="prevStep(1)">이전</button>
+                <button class="btn primary" onclick="nextStep(3)">다음</button>
+            </div>
+        </section>
+
+        <!-- STEP 3: 운전자 및 차량 상태 -->
+        <section id="step3" class="step">
+            <h2>운전자 및 차량 상태</h2>
+            
+            <div class="check-category">운전자 건강상태</div>
+            <div class="form-group check-item">
+                <label>혈압 <span class="required">*</span></label>
+                <div class="radio-card-group horizontal">
+                    <label class="radio-card"><input type="radio" name="health_bp" data-code="H-01" value="정상"><span class="card-content">정상</span></label>
+                    <label class="radio-card warning"><input type="radio" name="health_bp" data-code="H-01" value="유소견"><span class="card-content">유소견</span></label>
+                </div>
+            </div>
+            <div class="form-group check-item">
+                <label>심혈관계 질환 <span class="required">*</span></label>
+                <div class="radio-card-group horizontal">
+                    <label class="radio-card"><input type="radio" name="health_cv" data-code="H-02" value="정상"><span class="card-content">정상</span></label>
+                    <label class="radio-card warning"><input type="radio" name="health_cv" data-code="H-02" value="유소견"><span class="card-content">유소견</span></label>
+                </div>
+            </div>
+            <div class="form-group check-item">
+                <label>기타 질환 <span class="required">*</span></label>
+                <div class="radio-card-group horizontal">
+                    <label class="radio-card"><input type="radio" name="health_etc" data-code="H-03" value="정상"><span class="card-content">정상</span></label>
+                    <label class="radio-card warning"><input type="radio" name="health_etc" data-code="H-03" value="유소견"><span class="card-content">유소견</span></label>
+                </div>
+            </div>
+
+            <div class="check-category">차량 상태</div>
+            <div id="dynamicVehicleItems">
+                <!-- JS 렌더링 -->
+            </div>
+
+            <div class="bottom-actions flex">
+                <button class="btn secondary" onclick="prevStep(2)">이전</button>
+                <button class="btn primary" onclick="nextStep(4)">다음</button>
+            </div>
+        </section>
+
+        <!-- STEP 4: 화물 적재 상태 -->
+        <section id="step4" class="step">
+            <h2>화물 적재 상태 <span id="vehicleTypeLabel" class="type-badge">WING</span></h2>
+            
+            <div id="dynamicCargoItems">
+                <!-- JS 렌더링 -->
+            </div>
+
+            <div class="bottom-actions flex">
+                <button class="btn secondary" onclick="prevStep(3)">이전</button>
+                <button class="btn primary" onclick="nextStep(5)">다음</button>
+            </div>
+        </section>
+
+        <!-- STEP 5: 최종 제출 및 동의 -->
+        <section id="step5" class="step">
+            <h2>사업장 유해 위험 정보 및 준수사항</h2>
+            
+            <div id="dynamicRulesContainer" class="rules-container">
+                <!-- JS 렌더링 -->
+            </div>
+
+            <div class="form-group check-item" style="margin-top:20px; padding-top:20px; border-top:2px solid #eee;">
+                <label style="font-size: 1.1em; line-height: 1.4;">상기 안전 준수사항을 충분히 숙지하였으며, 이를 적극 준수할 것을 동의합니까? <span class="required">*</span></label>
+                <div class="radio-card-group horizontal" style="margin-top: 15px;">
+                    <label class="radio-card">
+                        <input type="radio" name="final_consent" value="네">
+                        <span class="card-content">네 (동의)</span>
+                    </label>
+                    <label class="radio-card warning">
+                        <input type="radio" name="final_consent" value="아니요">
+                        <span class="card-content">아니요 (거부)</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="bottom-actions flex">
+                <button class="btn secondary" onclick="prevStep(4)">이전</button>
+                <button class="btn primary submit" id="submitBtn" onclick="submitForm()">제출하기</button>
+            </div>
+        </section>
+
+        <!-- 완료 화면 -->
+        <section id="stepComplete" class="step success-screen">
+            <div class="success-icon">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            </div>
+            <h2>안전점검이 완료되었습니다.</h2>
+            <p>오늘도 안전 운전 하십시오.</p>
+            <div class="receipt-box">
+                <span>접수번호: </span><strong id="receiptNo"></strong>
+            </div>
+            <button class="btn primary mt-4" onclick="location.reload()">처음으로 돌아가기</button>
+        </section>
+    </div>
+
+    <!-- Toast UI for Notifications -->
+    <div id="toast" class="toast hidden"></div>
+
+    <!-- 로딩 오버레이 -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+        <p>제출 중...</p>
+    </div>
+
+    <script src="app.js?v=7"></script>
+</body>
+</html>

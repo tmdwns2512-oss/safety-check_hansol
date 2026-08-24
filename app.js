@@ -1,6 +1,11 @@
 const totalSteps = 5;
 let currentStep = 1;
 
+// 1. URL 쿼리 파라미터 감지 (center & type)
+const urlParams = new URLSearchParams(window.location.search);
+const centerName = urlParams.get('center') || '천안센터';
+const checkType = urlParams.get('type') || 'in'; // 'in' (입차) 또는 'out' (적재후)
+
 // DOM Elements
 const stepIndicator = document.getElementById('step-indicator');
 const toastEl = document.getElementById('toast');
@@ -13,6 +18,8 @@ const vehicleTypeLabel = document.getElementById('vehicleTypeLabel');
 
 // State
 let formData = {
+    centerName: centerName,
+    checkType: checkType === 'out' ? '적재후' : '입차',
     vehicleNo: "",
     vehicleType: "",
     driverName: "",
@@ -77,7 +84,6 @@ const rulesData = {
     ]
 };
 
-// Item configuration for STEP 3 and 4
 const vehicleItemsData = {
     WING: [
         { name: "v_tire", code: "V-01", label: "타이어 상태" },
@@ -130,14 +136,22 @@ const cargoItemsData = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Initialization code
+    // 센터 배지 표시 변경
+    const centerBadge = document.querySelector('.center-badge');
+    if (centerBadge) {
+        centerBadge.innerText = `[${centerName}] ${checkType === 'out' ? '- 적재 후 점검' : '- 입차 점검'}`;
+    }
+
+    // ?type=out 접속 시 적재 후 전용 모드로 시작
+    if (checkType === 'out') {
+        goToStep(4);
+    }
 });
 
 // Navigation Methods
 function nextStep(step) {
     if (!validateStep(currentStep)) return;
     
-    // If we transition to Step 3, 4, or 5, render the dynamic items
     if (step >= 3 && step <= 5) {
         renderDynamicItems();
     }
@@ -146,20 +160,61 @@ function nextStep(step) {
 }
 
 function prevStep(step) {
+    if (checkType === 'out' && step === 3) {
+        return; // 적재후 모드일 때는 Step 3 이하로 안 돌아감
+    }
     goToStep(step);
 }
 
 function goToStep(step) {
-    // Hide current
     document.getElementById(`step${currentStep}`).classList.remove('active');
-    
-    // Show next
     currentStep = step;
     document.getElementById(`step${currentStep}`).classList.add('active');
     
-    // Update header indicator
-    stepIndicator.innerText = `Step ${currentStep} / ${totalSteps}`;
+    if (checkType === 'out' && step === 4) {
+        stepIndicator.innerText = `적재 후 상태 점검`;
+        renderOutModeCargoForm();
+    } else {
+        stepIndicator.innerText = `Step ${currentStep} / ${totalSteps}`;
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// 적재 후 전용 입력 상단 폼 생성 (차량번호 및 유형 수집)
+function renderOutModeCargoForm() {
+    let outHeader = document.getElementById('outModeHeader');
+    if (!outHeader) {
+        outHeader = document.createElement('div');
+        outHeader.id = 'outModeHeader';
+        outHeader.innerHTML = `
+            <div class="form-group" style="margin-bottom:15px;">
+                <label for="outVehicleNo">차량번호 <span class="required">*</span></label>
+                <input type="text" id="outVehicleNo" placeholder="예: 123가4567" value="${formData.vehicleNo}">
+            </div>
+            <div class="form-group" style="margin-bottom:15px;">
+                <label>차량 유형 <span class="required">*</span></label>
+                <div class="radio-card-group horizontal">
+                    <label class="radio-card"><input type="radio" name="outVehicleType" value="WING" ${formData.vehicleType === 'WING' ? 'checked' : ''}><span class="card-content">윙바디</span></label>
+                    <label class="radio-card"><input type="radio" name="outVehicleType" value="CARGO" ${formData.vehicleType === 'CARGO' ? 'checked' : ''}><span class="card-content">카고</span></label>
+                    <label class="radio-card"><input type="radio" name="outVehicleType" value="CONTAINER" ${formData.vehicleType === 'CONTAINER' ? 'checked' : ''}><span class="card-content">컨테이너</span></label>
+                </div>
+            </div>
+        `;
+        step4CargoRender.parentNode.insertBefore(outHeader, step4CargoRender);
+
+        // 차량 유형 변경 시 즉시 항목 재렌더링
+        outHeader.querySelectorAll('input[name="outVehicleType"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                formData.vehicleType = e.target.value;
+                renderDynamicItems();
+            });
+        });
+    }
+    
+    if (!formData.vehicleType) {
+        formData.vehicleType = 'WING'; // 기본값
+    }
+    renderDynamicItems();
 }
 
 // Validation Methods
@@ -178,7 +233,6 @@ function validateStep(step) {
             return false;
         }
         
-        // Save to state
         formData.vehicleNo = vno;
         formData.vehicleType = vtype.value;
         formData.carrierName = document.getElementById('carrierName').value.trim();
@@ -197,12 +251,10 @@ function validateStep(step) {
         
         formData.insp_comprehensive = comp.value;
         formData.insp_regular = reg.value;
-        
         return true;
     }
     
     if (step === 3) {
-        // Check health items
         const healthNames = ['health_bp', 'health_cv', 'health_etc'];
         for (let name of healthNames) {
             if (!document.querySelector(`input[name="${name}"]:checked`)) {
@@ -210,7 +262,6 @@ function validateStep(step) {
                 return false;
             }
         }
-        // Check dynamic vehicle items
         const currentVItems = vehicleItemsData[formData.vehicleType];
         for (let item of currentVItems) {
             if (!document.querySelector(`input[name="${item.name}"]:checked`)) {
@@ -222,7 +273,22 @@ function validateStep(step) {
     }
     
     if (step === 4) {
-        // Validation for dynamic cargo items
+        // 적재후 전용 모드 검증
+        if (checkType === 'out') {
+            const outVno = document.getElementById('outVehicleNo').value.trim();
+            const outVtype = document.querySelector('input[name="outVehicleType"]:checked');
+            if (!outVno) {
+                showToast("차량번호를 입력해주세요.");
+                return false;
+            }
+            if (!outVtype) {
+                showToast("차량 유형을 선택해주세요.");
+                return false;
+            }
+            formData.vehicleNo = outVno;
+            formData.vehicleType = outVtype.value;
+        }
+
         const currentCItems = cargoItemsData[formData.vehicleType];
         for (let item of currentCItems) {
             if (!document.querySelector(`input[name="${item.name}"]:checked`)) {
@@ -238,11 +304,13 @@ function validateStep(step) {
 
 // Render dynamic items for STEP 3 and 4
 function renderDynamicItems() {
-    const type = formData.vehicleType;
-    vehicleTypeLabel.innerText = type === 'WING' ? '윙바디 (WING)' : (type === 'CARGO' ? '카고 (CARGO)' : '컨테이너 (CONTAINER)');
+    const type = formData.vehicleType || 'WING';
+    if (vehicleTypeLabel) {
+        vehicleTypeLabel.innerText = type === 'WING' ? '윙바디 (WING)' : (type === 'CARGO' ? '카고 (CARGO)' : '컨테이너 (CONTAINER)');
+    }
     
-    // Render Vehicle Items (Step 3)
-    if (step3VehicleRender.dataset.type !== type) {
+    // Step 3
+    if (step3VehicleRender && step3VehicleRender.dataset.type !== type) {
         const vItems = vehicleItemsData[type];
         let vHtml = '';
         vItems.forEach(item => {
@@ -266,8 +334,8 @@ function renderDynamicItems() {
         step3VehicleRender.dataset.type = type;
     }
 
-    // Render Cargo Items (Step 4)
-    if (step4CargoRender.dataset.type !== type) {
+    // Step 4
+    if (step4CargoRender && step4CargoRender.dataset.type !== type) {
         const cItems = cargoItemsData[type];
         let cHtml = '';
         cItems.forEach(item => {
@@ -291,7 +359,7 @@ function renderDynamicItems() {
         step4CargoRender.dataset.type = type;
     }
 
-    // Render Rules (Step 5)
+    // Step 5 Rules
     if (step5RulesRender && step5RulesRender.dataset.type !== type) {
         let rHtml = `
             <div style="background:#fff3cd; border:1px solid #ffeeba; color:#856404; padding:15px; border-radius:8px; margin-bottom:15px; font-size:0.9em; line-height:1.6;">
@@ -333,18 +401,17 @@ function submitForm() {
     
     formData.finalConsent = consent.value;
     
-    // Gather all item data
     const allItems = [];
     
-    // STEP 3 items
-    document.querySelectorAll('#step3 input[type="radio"]:checked').forEach(el => {
-        allItems.push({
-            itemCode: el.getAttribute('data-code'),
-            value: el.value
+    if (checkType === 'in') {
+        document.querySelectorAll('#step3 input[type="radio"]:checked').forEach(el => {
+            allItems.push({
+                itemCode: el.getAttribute('data-code'),
+                value: el.value
+            });
         });
-    });
+    }
     
-    // STEP 4 items
     document.querySelectorAll('#step4 input[type="radio"]:checked').forEach(el => {
         allItems.push({
             itemCode: el.getAttribute('data-code'),
@@ -356,9 +423,9 @@ function submitForm() {
     
     console.log("제출할 데이터:", JSON.stringify(formData, null, 2));
     
-    // API Request to n8n Webhook
     loadingOverlay.classList.remove('hidden');
     
+    // n8n Webhook 호출
     fetch('https://desktop-g3rnt5i.tail25a848.ts.net/webhook-test/a7c22a42-15cd-4b1f-9020-465c437c6181', {
         method: 'POST',
         headers: {
@@ -382,7 +449,6 @@ function submitForm() {
 }
 
 function showCompletionScreen() {
-    // Generate random receipt number format (YYYYMMDD-XXXX)
     const date = new Date();
     const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
     const randomNum = Math.floor(1000 + Math.random() * 9000);

@@ -1,10 +1,11 @@
-const totalSteps = 5;
-let currentStep = 1;
-
-// 1. URL 쿼리 파라미터 감지 (center & type)
+// URL 파라미터 감지 (center & type)
 const urlParams = new URLSearchParams(window.location.search);
 const centerName = urlParams.get('center') || '천안센터';
 const checkType = urlParams.get('type') || 'in'; // 'in' (입차) 또는 'out' (적재후)
+
+// 모드별 총 스텝 수 정의 (in: 4단계, out: 2단계)
+const totalSteps = checkType === 'out' ? 2 : 4;
+let currentStep = checkType === 'out' ? 4 : 1;
 
 // DOM Elements
 const stepIndicator = document.getElementById('step-indicator');
@@ -136,21 +137,28 @@ const cargoItemsData = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    // 센터 배지 표시 변경
     const centerBadge = document.querySelector('.center-badge');
     if (centerBadge) {
         centerBadge.innerText = `[${centerName}] ${checkType === 'out' ? '- 적재 후 점검' : '- 입차 점검'}`;
     }
 
-    // ?type=out 접속 시 적재 후 전용 모드로 시작
     if (checkType === 'out') {
         goToStep(4);
+    } else {
+        updateStepIndicator(1);
     }
 });
 
 // Navigation Methods
 function nextStep(step) {
     if (!validateStep(currentStep)) return;
+    
+    // 입차 모드일 때 Step 3 -> Step 5로 점프 (화물적재 Step 4 스킵)
+    if (checkType === 'in' && currentStep === 3) {
+        renderDynamicItems();
+        goToStep(5);
+        return;
+    }
     
     if (step >= 3 && step <= 5) {
         renderDynamicItems();
@@ -160,27 +168,39 @@ function nextStep(step) {
 }
 
 function prevStep(step) {
+    // 입차 모드일 때 Step 5 -> Step 3으로 복귀 (Step 4 스킵)
+    if (checkType === 'in' && currentStep === 5) {
+        goToStep(3);
+        return;
+    }
     if (checkType === 'out' && step === 3) {
-        return; // 적재후 모드일 때는 Step 3 이하로 안 돌아감
+        return;
     }
     goToStep(step);
 }
 
 function goToStep(step) {
-    document.getElementById(`step${currentStep}`).classList.remove('active');
-    currentStep = step;
-    document.getElementById(`step${currentStep}`).classList.add('active');
+    const prevEl = document.getElementById(`step${currentStep}`);
+    if (prevEl) prevEl.classList.remove('active');
     
-    if (checkType === 'out' && step === 4) {
-        stepIndicator.innerText = `적재 후 상태 점검`;
-        renderOutModeCargoForm();
-    } else {
-        stepIndicator.innerText = `Step ${currentStep} / ${totalSteps}`;
-    }
+    currentStep = step;
+    const nextEl = document.getElementById(`step${currentStep}`);
+    if (nextEl) nextEl.classList.add('active');
+    
+    updateStepIndicator(step);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-// 적재 후 전용 입력 상단 폼 생성 (차량번호 및 유형 수집)
+function updateStepIndicator(step) {
+    if (checkType === 'out') {
+        stepIndicator.innerText = step === 4 ? `적재 후 점검 (1 / 2)` : `최종 동의 (2 / 2)`;
+        if (step === 4) renderOutModeCargoForm();
+    } else {
+        const displayStep = step === 5 ? 4 : step;
+        stepIndicator.innerText = `Step ${displayStep} / ${totalSteps}`;
+    }
+}
+
 function renderOutModeCargoForm() {
     let outHeader = document.getElementById('outModeHeader');
     if (!outHeader) {
@@ -202,7 +222,6 @@ function renderOutModeCargoForm() {
         `;
         step4CargoRender.parentNode.insertBefore(outHeader, step4CargoRender);
 
-        // 차량 유형 변경 시 즉시 항목 재렌더링
         outHeader.querySelectorAll('input[name="outVehicleType"]').forEach(radio => {
             radio.addEventListener('change', (e) => {
                 formData.vehicleType = e.target.value;
@@ -212,12 +231,11 @@ function renderOutModeCargoForm() {
     }
     
     if (!formData.vehicleType) {
-        formData.vehicleType = 'WING'; // 기본값
+        formData.vehicleType = 'WING';
     }
     renderDynamicItems();
 }
 
-// Validation Methods
 function validateStep(step) {
     if (step === 1) {
         const vno = document.getElementById('vehicleNo').value.trim();
@@ -273,7 +291,6 @@ function validateStep(step) {
     }
     
     if (step === 4) {
-        // 적재후 전용 모드 검증
         if (checkType === 'out') {
             const outVno = document.getElementById('outVehicleNo').value.trim();
             const outVtype = document.querySelector('input[name="outVehicleType"]:checked');
@@ -302,14 +319,12 @@ function validateStep(step) {
     return true;
 }
 
-// Render dynamic items for STEP 3 and 4
 function renderDynamicItems() {
     const type = formData.vehicleType || 'WING';
     if (vehicleTypeLabel) {
         vehicleTypeLabel.innerText = type === 'WING' ? '윙바디 (WING)' : (type === 'CARGO' ? '카고 (CARGO)' : '컨테이너 (CONTAINER)');
     }
     
-    // Step 3
     if (step3VehicleRender && step3VehicleRender.dataset.type !== type) {
         const vItems = vehicleItemsData[type];
         let vHtml = '';
@@ -318,14 +333,8 @@ function renderDynamicItems() {
             <div class="form-group check-item">
                 <label>${item.label} <span class="required">*</span></label>
                 <div class="radio-card-group horizontal">
-                    <label class="radio-card">
-                        <input type="radio" name="${item.name}" data-code="${item.code}" value="양호">
-                        <span class="card-content">양호</span>
-                    </label>
-                    <label class="radio-card warning">
-                        <input type="radio" name="${item.name}" data-code="${item.code}" value="불량">
-                        <span class="card-content">불량</span>
-                    </label>
+                    <label class="radio-card"><input type="radio" name="${item.name}" data-code="${item.code}" value="양호"><span class="card-content">양호</span></label>
+                    <label class="radio-card warning"><input type="radio" name="${item.name}" data-code="${item.code}" value="불량"><span class="card-content">불량</span></label>
                 </div>
             </div>
             `;
@@ -334,7 +343,6 @@ function renderDynamicItems() {
         step3VehicleRender.dataset.type = type;
     }
 
-    // Step 4
     if (step4CargoRender && step4CargoRender.dataset.type !== type) {
         const cItems = cargoItemsData[type];
         let cHtml = '';
@@ -343,14 +351,8 @@ function renderDynamicItems() {
             <div class="form-group check-item">
                 <label>${item.label} <span class="required">*</span></label>
                 <div class="radio-card-group horizontal">
-                    <label class="radio-card">
-                        <input type="radio" name="${item.name}" data-code="${item.code}" value="양호">
-                        <span class="card-content">양호</span>
-                    </label>
-                    <label class="radio-card warning">
-                        <input type="radio" name="${item.name}" data-code="${item.code}" value="불량">
-                        <span class="card-content">불량</span>
-                    </label>
+                    <label class="radio-card"><input type="radio" name="${item.name}" data-code="${item.code}" value="양호"><span class="card-content">양호</span></label>
+                    <label class="radio-card warning"><input type="radio" name="${item.name}" data-code="${item.code}" value="불량"><span class="card-content">불량</span></label>
                 </div>
             </div>
             `;
@@ -359,7 +361,6 @@ function renderDynamicItems() {
         step4CargoRender.dataset.type = type;
     }
 
-    // Step 5 Rules
     if (step5RulesRender && step5RulesRender.dataset.type !== type) {
         let rHtml = `
             <div style="background:#fff3cd; border:1px solid #ffeeba; color:#856404; padding:15px; border-radius:8px; margin-bottom:15px; font-size:0.9em; line-height:1.6;">
@@ -382,7 +383,6 @@ function renderDynamicItems() {
     }
 }
 
-// Toast utility
 function showToast(message) {
     toastEl.innerText = message;
     toastEl.classList.add('show');
@@ -391,7 +391,6 @@ function showToast(message) {
     }, 3000);
 }
 
-// Submission
 function submitForm() {
     const consent = document.querySelector('input[name="final_consent"]:checked');
     if (!consent) {
@@ -400,7 +399,6 @@ function submitForm() {
     }
     
     formData.finalConsent = consent.value;
-    
     const allItems = [];
     
     if (checkType === 'in') {
@@ -412,20 +410,20 @@ function submitForm() {
         });
     }
     
-    document.querySelectorAll('#step4 input[type="radio"]:checked').forEach(el => {
-        allItems.push({
-            itemCode: el.getAttribute('data-code'),
-            value: el.value
+    if (checkType === 'out') {
+        document.querySelectorAll('#step4 input[type="radio"]:checked').forEach(el => {
+            allItems.push({
+                itemCode: el.getAttribute('data-code'),
+                value: el.value
+            });
         });
-    });
+    }
     
     formData.items = allItems;
-    
     console.log("제출할 데이터:", JSON.stringify(formData, null, 2));
     
     loadingOverlay.classList.remove('hidden');
     
-    // n8n Webhook 호출
     fetch('https://desktop-g3rnt5i.tail25a848.ts.net/webhook-test/a7c22a42-15cd-4b1f-9020-465c437c6181', {
         method: 'POST',
         headers: {
@@ -455,7 +453,6 @@ function showCompletionScreen() {
     const receiptNo = `${dateStr}-${randomNum}`;
     
     document.getElementById('receiptNo').innerText = receiptNo;
-    
     document.getElementById('step5').classList.remove('active');
     document.getElementById('stepComplete').classList.add('active');
     document.querySelector('.app-header').style.display = 'none';

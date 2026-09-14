@@ -3,9 +3,9 @@ const urlParams = new URLSearchParams(window.location.search);
 const centerName = urlParams.get('center') || '천안센터';
 const checkType = urlParams.get('type') || 'in'; // 'in' (입차) 또는 'out' (적재후)
 
-// 모드별 총 스텝 수 정의 (in: 4단계, out: 2단계)
-const totalSteps = checkType === 'out' ? 2 : 4;
-let currentStep = checkType === 'out' ? 4 : 1;
+// 모드별 총 스텝 수 (in: 4단계, out: 3단계)
+const totalSteps = checkType === 'out' ? 3 : 4;
+let currentStep = 1;
 
 // DOM Elements
 const stepIndicator = document.getElementById('step-indicator');
@@ -137,103 +137,87 @@ const cargoItemsData = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
+    // 모든 스텝 비활성화 후 Step 1 활성화 보장
+    document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
+    const step1 = document.getElementById('step1');
+    if (step1) step1.classList.add('active');
+    currentStep = 1;
+
+    // 센터 배지 표시 변경
     const centerBadge = document.querySelector('.center-badge');
     if (centerBadge) {
         centerBadge.innerText = `[${centerName}] ${checkType === 'out' ? '- 적재 후 점검' : '- 입차 점검'}`;
     }
 
-    if (checkType === 'out') {
-        goToStep(4);
-    } else {
-        updateStepIndicator(1);
-    }
+    updateStepIndicator(1);
 });
 
 // Navigation Methods
 function nextStep(step) {
     if (!validateStep(currentStep)) return;
     
-    // 입차 모드일 때 Step 3 -> Step 5로 점프 (화물적재 Step 4 스킵)
-    if (checkType === 'in' && currentStep === 3) {
-        renderDynamicItems();
-        goToStep(5);
-        return;
+    let targetStep = step;
+
+    if (checkType === 'in') {
+        // 입차 모드: Step 3 완료 시 화물적재(Step 4) 건너뛰고 Step 5로 이동
+        if (currentStep === 3) {
+            targetStep = 5;
+        }
+    } else if (checkType === 'out') {
+        // 적재후 모드: Step 1 완료 시 검사/상태 건너뛰고 Step 4로 이동
+        if (currentStep === 1) {
+            targetStep = 4;
+        }
     }
     
-    if (step >= 3 && step <= 5) {
+    if (targetStep >= 3 && targetStep <= 5) {
         renderDynamicItems();
     }
     
-    goToStep(step);
+    goToStep(targetStep);
 }
 
 function prevStep(step) {
-    // 입차 모드일 때 Step 5 -> Step 3으로 복귀 (Step 4 스킵)
-    if (checkType === 'in' && currentStep === 5) {
-        goToStep(3);
-        return;
+    let targetStep = step;
+
+    if (checkType === 'in') {
+        // 입차 모드: Step 5에서 이전 클릭 시 Step 3으로 복귀
+        if (currentStep === 5) {
+            targetStep = 3;
+        }
+    } else if (checkType === 'out') {
+        // 적재후 모드: Step 4에서 이전 클릭 시 Step 1로 복귀
+        if (currentStep === 4) {
+            targetStep = 1;
+        }
     }
-    if (checkType === 'out' && step === 3) {
-        return;
-    }
-    goToStep(step);
+
+    goToStep(targetStep);
 }
 
 function goToStep(step) {
-    const prevEl = document.getElementById(`step${currentStep}`);
-    if (prevEl) prevEl.classList.remove('active');
+    document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
     
     currentStep = step;
-    const nextEl = document.getElementById(`step${currentStep}`);
-    if (nextEl) nextEl.classList.add('active');
+    const targetEl = document.getElementById(`step${currentStep}`);
+    if (targetEl) targetEl.classList.add('active');
     
     updateStepIndicator(step);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function updateStepIndicator(step) {
+    if (!stepIndicator) return;
+
     if (checkType === 'out') {
-        stepIndicator.innerText = step === 4 ? `적재 후 점검 (1 / 2)` : `최종 동의 (2 / 2)`;
-        if (step === 4) renderOutModeCargoForm();
+        let stepNum = 1;
+        if (step === 4) stepNum = 2;
+        if (step === 5) stepNum = 3;
+        stepIndicator.innerText = `적재 후 점검 (${stepNum} / ${totalSteps})`;
     } else {
-        const displayStep = step === 5 ? 4 : step;
-        stepIndicator.innerText = `Step ${displayStep} / ${totalSteps}`;
+        let stepNum = step === 5 ? 4 : step;
+        stepIndicator.innerText = `입차 점검 (${stepNum} / ${totalSteps})`;
     }
-}
-
-function renderOutModeCargoForm() {
-    let outHeader = document.getElementById('outModeHeader');
-    if (!outHeader) {
-        outHeader = document.createElement('div');
-        outHeader.id = 'outModeHeader';
-        outHeader.innerHTML = `
-            <div class="form-group" style="margin-bottom:15px;">
-                <label for="outVehicleNo">차량번호 <span class="required">*</span></label>
-                <input type="text" id="outVehicleNo" placeholder="예: 123가4567" value="${formData.vehicleNo}">
-            </div>
-            <div class="form-group" style="margin-bottom:15px;">
-                <label>차량 유형 <span class="required">*</span></label>
-                <div class="radio-card-group horizontal">
-                    <label class="radio-card"><input type="radio" name="outVehicleType" value="WING" ${formData.vehicleType === 'WING' ? 'checked' : ''}><span class="card-content">윙바디</span></label>
-                    <label class="radio-card"><input type="radio" name="outVehicleType" value="CARGO" ${formData.vehicleType === 'CARGO' ? 'checked' : ''}><span class="card-content">카고</span></label>
-                    <label class="radio-card"><input type="radio" name="outVehicleType" value="CONTAINER" ${formData.vehicleType === 'CONTAINER' ? 'checked' : ''}><span class="card-content">컨테이너</span></label>
-                </div>
-            </div>
-        `;
-        step4CargoRender.parentNode.insertBefore(outHeader, step4CargoRender);
-
-        outHeader.querySelectorAll('input[name="outVehicleType"]').forEach(radio => {
-            radio.addEventListener('change', (e) => {
-                formData.vehicleType = e.target.value;
-                renderDynamicItems();
-            });
-        });
-    }
-    
-    if (!formData.vehicleType) {
-        formData.vehicleType = 'WING';
-    }
-    renderDynamicItems();
 }
 
 function validateStep(step) {
@@ -291,21 +275,6 @@ function validateStep(step) {
     }
     
     if (step === 4) {
-        if (checkType === 'out') {
-            const outVno = document.getElementById('outVehicleNo').value.trim();
-            const outVtype = document.querySelector('input[name="outVehicleType"]:checked');
-            if (!outVno) {
-                showToast("차량번호를 입력해주세요.");
-                return false;
-            }
-            if (!outVtype) {
-                showToast("차량 유형을 선택해주세요.");
-                return false;
-            }
-            formData.vehicleNo = outVno;
-            formData.vehicleType = outVtype.value;
-        }
-
         const currentCItems = cargoItemsData[formData.vehicleType];
         for (let item of currentCItems) {
             if (!document.querySelector(`input[name="${item.name}"]:checked`)) {
@@ -325,6 +294,7 @@ function renderDynamicItems() {
         vehicleTypeLabel.innerText = type === 'WING' ? '윙바디 (WING)' : (type === 'CARGO' ? '카고 (CARGO)' : '컨테이너 (CONTAINER)');
     }
     
+    // Step 3 렌더링
     if (step3VehicleRender && step3VehicleRender.dataset.type !== type) {
         const vItems = vehicleItemsData[type];
         let vHtml = '';
@@ -343,6 +313,7 @@ function renderDynamicItems() {
         step3VehicleRender.dataset.type = type;
     }
 
+    // Step 4 렌더링
     if (step4CargoRender && step4CargoRender.dataset.type !== type) {
         const cItems = cargoItemsData[type];
         let cHtml = '';
@@ -361,6 +332,7 @@ function renderDynamicItems() {
         step4CargoRender.dataset.type = type;
     }
 
+    // Step 5 수칙 렌더링
     if (step5RulesRender && step5RulesRender.dataset.type !== type) {
         let rHtml = `
             <div style="background:#fff3cd; border:1px solid #ffeeba; color:#856404; padding:15px; border-radius:8px; margin-bottom:15px; font-size:0.9em; line-height:1.6;">

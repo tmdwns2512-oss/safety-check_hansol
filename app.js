@@ -3,8 +3,8 @@ const urlParams = new URLSearchParams(window.location.search);
 const centerName = urlParams.get('center') || '천안센터';
 const checkType = urlParams.get('type') || 'in'; // 'in' (입차) 또는 'out' (적재후)
 
-// 모드별 총 스텝 수 (in: 4단계, out: 3단계)
-const totalSteps = checkType === 'out' ? 3 : 4;
+// 모드별 총 스텝 수 (in: 4단계, out: 2단계)
+const totalSteps = checkType === 'out' ? 2 : 4;
 let currentStep = 1;
 
 // DOM Elements
@@ -149,6 +149,17 @@ document.addEventListener('DOMContentLoaded', () => {
         centerBadge.innerText = `[${centerName}] ${checkType === 'out' ? '- 적재 후 점검' : '- 입차 점검'}`;
     }
 
+    // 적재 후 모드일 때 Step 4 하단 버튼을 '제출하기'로 교체
+    if (checkType === 'out') {
+        const step4Actions = document.querySelector('#step4 .bottom-actions');
+        if (step4Actions) {
+            step4Actions.innerHTML = `
+                <button class="btn secondary" onclick="prevStep(1)">이전</button>
+                <button class="btn primary submit" id="submitBtn" onclick="submitForm()">제출하기</button>
+            `;
+        }
+    }
+
     updateStepIndicator(1);
 });
 
@@ -164,7 +175,7 @@ function nextStep(step) {
             targetStep = 5;
         }
     } else if (checkType === 'out') {
-        // 적재후 모드: Step 1 완료 시 검사/상태 건너뛰고 Step 4로 이동
+        // 적재후 모드: Step 1 완료 시 검사/상태 건너뛰고 바로 Step 4로 이동
         if (currentStep === 1) {
             targetStep = 4;
         }
@@ -181,12 +192,10 @@ function prevStep(step) {
     let targetStep = step;
 
     if (checkType === 'in') {
-        // 입차 모드: Step 5에서 이전 클릭 시 Step 3으로 복귀
         if (currentStep === 5) {
             targetStep = 3;
         }
     } else if (checkType === 'out') {
-        // 적재후 모드: Step 4에서 이전 클릭 시 Step 1로 복귀
         if (currentStep === 4) {
             targetStep = 1;
         }
@@ -210,9 +219,7 @@ function updateStepIndicator(step) {
     if (!stepIndicator) return;
 
     if (checkType === 'out') {
-        let stepNum = 1;
-        if (step === 4) stepNum = 2;
-        if (step === 5) stepNum = 3;
+        let stepNum = step === 1 ? 1 : 2;
         stepIndicator.innerText = `적재 후 점검 (${stepNum} / ${totalSteps})`;
     } else {
         let stepNum = step === 5 ? 4 : step;
@@ -220,6 +227,7 @@ function updateStepIndicator(step) {
     }
 }
 
+// Validation Methods (불량, 유소견, 아니요 차단 추가)
 function validateStep(step) {
     if (step === 1) {
         const vno = document.getElementById('vehicleNo').value.trim();
@@ -251,23 +259,46 @@ function validateStep(step) {
             return false;
         }
         
+        // 차단 조건: 불량 선택 시 진입 차단
+        if (comp.value === '불량' || reg.value === '불량') {
+            showToast("차량 검사 결과 '불량' 항목이 있어 다음 단계로 진행할 수 없습니다.");
+            return false;
+        }
+        
         formData.insp_comprehensive = comp.value;
         formData.insp_regular = reg.value;
         return true;
     }
     
     if (step === 3) {
-        const healthNames = ['health_bp', 'health_cv', 'health_etc'];
-        for (let name of healthNames) {
-            if (!document.querySelector(`input[name="${name}"]:checked`)) {
+        // 건강상태 점검
+        const healthMap = {
+            'health_bp': '혈압',
+            'health_cv': '심혈관계 질환',
+            'health_etc': '기타 질환'
+        };
+        for (let [name, label] of Object.entries(healthMap)) {
+            const selected = document.querySelector(`input[name="${name}"]:checked`);
+            if (!selected) {
                 showToast("모든 점검 항목을 선택해주세요.");
                 return false;
             }
+            if (selected.value === '유소견') {
+                showToast(`건강상태(${label}) 항목에 '유소견'이 있어 입차를 진행할 수 없습니다.`);
+                return false;
+            }
         }
+
+        // 차량 점검 항목 검증
         const currentVItems = vehicleItemsData[formData.vehicleType];
         for (let item of currentVItems) {
-            if (!document.querySelector(`input[name="${item.name}"]:checked`)) {
+            const selected = document.querySelector(`input[name="${item.name}"]:checked`);
+            if (!selected) {
                 showToast("모든 점검 항목을 선택해주세요.");
+                return false;
+            }
+            if (selected.value === '불량') {
+                showToast(`차량 점검(${item.label}) 결과 '불량' 항목이 있어 진행할 수 없습니다.`);
                 return false;
             }
         }
@@ -277,8 +308,13 @@ function validateStep(step) {
     if (step === 4) {
         const currentCItems = cargoItemsData[formData.vehicleType];
         for (let item of currentCItems) {
-            if (!document.querySelector(`input[name="${item.name}"]:checked`)) {
-                showToast("차량 유형별 점검 항목을 모두 선택해주세요.");
+            const selected = document.querySelector(`input[name="${item.name}"]:checked`);
+            if (!selected) {
+                showToast("화물 적재 점검 항목을 모두 선택해주세요.");
+                return false;
+            }
+            if (selected.value === '불량') {
+                showToast(`화물 적재(${item.label}) 상태가 '불량'입니다. 재결박/적재 후 진행해 주세요.`);
                 return false;
             }
         }
@@ -303,8 +339,14 @@ function renderDynamicItems() {
             <div class="form-group check-item">
                 <label>${item.label} <span class="required">*</span></label>
                 <div class="radio-card-group horizontal">
-                    <label class="radio-card"><input type="radio" name="${item.name}" data-code="${item.code}" value="양호"><span class="card-content">양호</span></label>
-                    <label class="radio-card warning"><input type="radio" name="${item.name}" data-code="${item.code}" value="불량"><span class="card-content">불량</span></label>
+                    <label class="radio-card">
+                        <input type="radio" name="${item.name}" data-code="${item.code}" value="양호">
+                        <span class="card-content">양호</span>
+                    </label>
+                    <label class="radio-card warning">
+                        <input type="radio" name="${item.name}" data-code="${item.code}" value="불량">
+                        <span class="card-content">불량</span>
+                    </label>
                 </div>
             </div>
             `;
@@ -322,8 +364,14 @@ function renderDynamicItems() {
             <div class="form-group check-item">
                 <label>${item.label} <span class="required">*</span></label>
                 <div class="radio-card-group horizontal">
-                    <label class="radio-card"><input type="radio" name="${item.name}" data-code="${item.code}" value="양호"><span class="card-content">양호</span></label>
-                    <label class="radio-card warning"><input type="radio" name="${item.name}" data-code="${item.code}" value="불량"><span class="card-content">불량</span></label>
+                    <label class="radio-card">
+                        <input type="radio" name="${item.name}" data-code="${item.code}" value="양호">
+                        <span class="card-content">양호</span>
+                    </label>
+                    <label class="radio-card warning">
+                        <input type="radio" name="${item.name}" data-code="${item.code}" value="불량">
+                        <span class="card-content">불량</span>
+                    </label>
                 </div>
             </div>
             `;
@@ -363,14 +411,26 @@ function showToast(message) {
     }, 3000);
 }
 
+// Submission
 function submitForm() {
-    const consent = document.querySelector('input[name="final_consent"]:checked');
-    if (!consent) {
-        showToast("최종 동의 여부를 선택해주세요.");
-        return;
+    // 입차 점검일 때만 Step 5의 최종 동의 검증
+    if (checkType === 'in') {
+        const consent = document.querySelector('input[name="final_consent"]:checked');
+        if (!consent) {
+            showToast("최종 동의 여부를 선택해주세요.");
+            return;
+        }
+        if (consent.value === '아니요') {
+            showToast("안전 준수사항에 동의하지 않으시면 입차 점검을 완료할 수 없습니다.");
+            return;
+        }
+        formData.finalConsent = consent.value;
+    } else {
+        // 적재 후 점검일 때는 Step 4 검증 수행
+        if (!validateStep(4)) return;
+        formData.finalConsent = "해당없음(적재후)";
     }
     
-    formData.finalConsent = consent.value;
     const allItems = [];
     
     if (checkType === 'in') {
@@ -425,7 +485,9 @@ function showCompletionScreen() {
     const receiptNo = `${dateStr}-${randomNum}`;
     
     document.getElementById('receiptNo').innerText = receiptNo;
-    document.getElementById('step5').classList.remove('active');
+    
+    // 현재 열려있는 스텝(Step 4 또는 Step 5) 닫기
+    document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
     document.getElementById('stepComplete').classList.add('active');
     document.querySelector('.app-header').style.display = 'none';
 }

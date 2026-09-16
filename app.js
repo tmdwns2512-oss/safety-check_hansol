@@ -273,7 +273,7 @@ function validateStep(step) {
     if (step === 3) {
         // 건강상태 점검
         const healthMap = {
-            'health_bp': '혈압(정상 : 80~120)',
+            'health_bp': '혈압',
             'health_cv': '심혈관계 질환',
             'health_etc': '기타 질환'
         };
